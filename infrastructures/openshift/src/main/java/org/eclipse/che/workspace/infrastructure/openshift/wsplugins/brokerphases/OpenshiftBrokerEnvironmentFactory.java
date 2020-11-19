@@ -12,7 +12,6 @@
 package org.eclipse.che.workspace.infrastructure.openshift.wsplugins.brokerphases;
 
 import java.util.Collection;
-import java.util.List;
 import javax.inject.Inject;
 import javax.inject.Named;
 import org.eclipse.che.api.core.model.workspace.runtime.RuntimeIdentity;
@@ -25,9 +24,7 @@ import org.eclipse.che.workspace.infrastructure.kubernetes.provision.Certificate
 import org.eclipse.che.workspace.infrastructure.kubernetes.wsplugins.brokerphases.BrokerEnvironmentFactory;
 import org.eclipse.che.workspace.infrastructure.kubernetes.wsplugins.brokerphases.KubernetesBrokerEnvironmentFactory;
 import org.eclipse.che.workspace.infrastructure.openshift.environment.OpenShiftEnvironment;
-import org.eclipse.che.workspace.infrastructure.openshift.project.OpenShiftProject;
-import org.eclipse.che.workspace.infrastructure.openshift.project.OpenShiftProjectFactory;
-import org.eclipse.che.workspace.infrastructure.openshift.provision.Openshift4TrustedCAProvisioner;
+import org.eclipse.che.workspace.infrastructure.openshift.provision.OpenshiftTrustedCAProvisioner;
 
 /**
  * Extends {@link KubernetesBrokerEnvironmentFactory} to be used in the openshift infrastructure.
@@ -37,10 +34,7 @@ import org.eclipse.che.workspace.infrastructure.openshift.provision.Openshift4Tr
 public class OpenshiftBrokerEnvironmentFactory
     extends BrokerEnvironmentFactory<OpenShiftEnvironment> {
 
-  private final String caCertificatesMountPath;
-  private final String metadataBrokerImage;
-  private final Openshift4TrustedCAProvisioner trustedCAProvisioner;
-  private final OpenShiftProjectFactory factory;
+  private final OpenshiftTrustedCAProvisioner trustedCAProvisioner;
 
   @Inject
   public OpenshiftBrokerEnvironmentFactory(
@@ -53,8 +47,7 @@ public class OpenshiftBrokerEnvironmentFactory
       @Nullable @Named("che.workspace.plugin_registry_url") String pluginRegistryUrl,
       @Named("che.infra.openshift.trusted_ca_bundles_mount_path") String caCertificatesMountPath,
       CertificateProvisioner certProvisioner,
-      OpenShiftProjectFactory factory,
-      Openshift4TrustedCAProvisioner trustedCAProvisioner) {
+      OpenshiftTrustedCAProvisioner trustedCAProvisioner) {
     super(
         cheWebsocketEndpoint,
         brokerPullPolicy,
@@ -63,10 +56,9 @@ public class OpenshiftBrokerEnvironmentFactory
         artifactsBrokerImage,
         metadataBrokerImage,
         pluginRegistryUrl,
+        trustedCAProvisioner,
+        caCertificatesMountPath,
         certProvisioner);
-    this.caCertificatesMountPath = caCertificatesMountPath;
-    this.metadataBrokerImage = metadataBrokerImage;
-    this.factory = factory;
     this.trustedCAProvisioner = trustedCAProvisioner;
   }
 
@@ -83,23 +75,9 @@ public class OpenshiftBrokerEnvironmentFactory
   public OpenShiftEnvironment createForMetadataBroker(
       Collection<PluginFQN> pluginFQNs, RuntimeIdentity runtimeID, boolean mergePlugins)
       throws InfrastructureException {
-    BrokersConfigs brokersConfigs =
-        getBrokersConfigs(pluginFQNs, runtimeID, metadataBrokerImage, mergePlugins);
-    OpenShiftEnvironment openShiftEnvironment = doCreate(brokersConfigs);
-    OpenShiftProject openshiftProject = factory.getOrCreate(runtimeID);
-    trustedCAProvisioner.provision(openShiftEnvironment, openshiftProject);
+    OpenShiftEnvironment openShiftEnvironment =
+        super.createForMetadataBroker(pluginFQNs, runtimeID, mergePlugins);
+    trustedCAProvisioner.provision(openShiftEnvironment, runtimeID);
     return openShiftEnvironment;
-  }
-
-  @Override
-  protected List<String> getCommandLineArgs(RuntimeIdentity runtimeId, boolean mergePlugins) {
-    List<String> cmdArgs = super.getCommandLineArgs(runtimeId, mergePlugins);
-
-    if (trustedCAProvisioner.isTrustedStoreInitialized()) {
-      cmdArgs.add("--cadir");
-      cmdArgs.add(caCertificatesMountPath);
-    }
-
-    return cmdArgs;
   }
 }

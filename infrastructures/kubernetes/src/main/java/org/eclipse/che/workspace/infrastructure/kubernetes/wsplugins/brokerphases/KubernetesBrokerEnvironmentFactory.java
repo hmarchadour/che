@@ -12,14 +12,19 @@
 package org.eclipse.che.workspace.infrastructure.kubernetes.wsplugins.brokerphases;
 
 import com.google.common.annotations.Beta;
+import java.util.Collection;
 import javax.inject.Inject;
 import javax.inject.Named;
+import org.eclipse.che.api.core.model.workspace.runtime.RuntimeIdentity;
+import org.eclipse.che.api.workspace.server.spi.InfrastructureException;
 import org.eclipse.che.api.workspace.server.spi.provision.env.AgentAuthEnableEnvVarProvider;
 import org.eclipse.che.api.workspace.server.spi.provision.env.MachineTokenEnvVarProvider;
+import org.eclipse.che.api.workspace.server.wsplugins.model.PluginFQN;
 import org.eclipse.che.commons.annotation.Nullable;
 import org.eclipse.che.workspace.infrastructure.kubernetes.environment.KubernetesEnvironment;
 import org.eclipse.che.workspace.infrastructure.kubernetes.provision.CertificateProvisioner;
-import org.eclipse.che.workspace.infrastructure.kubernetes.wsplugins.brokerphases.BrokerEnvironmentFactory.BrokersConfigs;
+import org.eclipse.che.workspace.infrastructure.kubernetes.provision.KubernetesTrustedCAProvisioner;
+import org.eclipse.che.workspace.infrastructure.kubernetes.provision.TrustedCAProvisioner;
 
 /**
  * Extends {@link BrokerEnvironmentFactory} to be used in the kubernetes infrastructure.
@@ -32,15 +37,19 @@ import org.eclipse.che.workspace.infrastructure.kubernetes.wsplugins.brokerphase
 public class KubernetesBrokerEnvironmentFactory
     extends BrokerEnvironmentFactory<KubernetesEnvironment> {
 
+  private final TrustedCAProvisioner trustedCAProvisioner;
+
   @Inject
   public KubernetesBrokerEnvironmentFactory(
       @Named("che.websocket.endpoint") String cheWebsocketEndpoint,
       @Named("che.workspace.plugin_broker.pull_policy") String brokerPullPolicy,
+      @Named("che.infra.kubernetes.trusted_ca_bundles_mount_path") String certificateMountPath,
       AgentAuthEnableEnvVarProvider authEnableEnvVarProvider,
       MachineTokenEnvVarProvider machineTokenEnvVarProvider,
       @Named("che.workspace.plugin_broker.artifacts.image") String artifactsBrokerImage,
       @Named("che.workspace.plugin_broker.metadata.image") String metadataBrokerImage,
       @Nullable @Named("che.workspace.plugin_registry_url") String pluginRegistryUrl,
+      KubernetesTrustedCAProvisioner trustedCAProvisioner,
       CertificateProvisioner certProvisioner) {
     super(
         cheWebsocketEndpoint,
@@ -50,7 +59,10 @@ public class KubernetesBrokerEnvironmentFactory
         artifactsBrokerImage,
         metadataBrokerImage,
         pluginRegistryUrl,
+        trustedCAProvisioner,
+        certificateMountPath,
         certProvisioner);
+    this.trustedCAProvisioner = trustedCAProvisioner;
   }
 
   @Override
@@ -60,5 +72,15 @@ public class KubernetesBrokerEnvironmentFactory
         .setMachines(brokersConfigs.machines)
         .setPods(brokersConfigs.pods)
         .build();
+  }
+
+  @Override
+  public KubernetesEnvironment createForMetadataBroker(
+      Collection<PluginFQN> pluginFQNs, RuntimeIdentity runtimeID, boolean mergePlugins)
+      throws InfrastructureException {
+    KubernetesEnvironment kubernetesEnvironment =
+        super.createForMetadataBroker(pluginFQNs, runtimeID, mergePlugins);
+    trustedCAProvisioner.provision(kubernetesEnvironment, runtimeID);
+    return kubernetesEnvironment;
   }
 }
