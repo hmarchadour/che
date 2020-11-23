@@ -80,7 +80,7 @@ public class KubernetesBrokerEnvironmentFactory
       throws InfrastructureException {
     KubernetesEnvironment kubernetesEnvironment =
         super.createForMetadataBroker(pluginFQNs, runtimeID, mergePlugins);
-    trustedCAProvisioner.provision(kubernetesEnvironment, runtimeID);
+    // trustedCAProvisioner.provision(kubernetesEnvironment, runtimeID);
     return kubernetesEnvironment;
   }
 }
